@@ -9,32 +9,41 @@ boolean selftest = true;
 #define at_clk 0
 #define at_data 1
 
+#define ledd 16
+
+void at_setup();
+void at_loop();
+void at_waitForCts();
+void at_sendBit(boolean bit);
+int at_readBit();
+unsigned char getOddParity(unsigned char p);
+unsigned char at_read();
 void at_write(unsigned char value);
+void at_enqueue(unsigned char* value, int sz);
+void handleHostData();
+
 
 void at_setup() {
   pinMode(at_clk, OUTPUT); 
   pinMode(at_data, OUTPUT); 
   digitalWrite(at_clk, HIGH); 
   digitalWrite(at_data, LOW);
-  delayMicroseconds(40);
+  delayMicroseconds(50);
   pinMode(at_clk, INPUT);
   pinMode(at_data, INPUT); 
+
+  pinMode(ledd, OUTPUT);
+  digitalWrite(ledd, LOW);
 }
 
 void at_loop() {
-  // Respond to power-on self test
-  //if (selftest && digitalRead(at_clk) == LOW) {
-  //  delay(10);
-  //  at_write(0xAA);
-  //  selftest = false;
-  //} else {
-    noInterrupts();
-    while(!at_keybuffer.isEmpty()) {
-      unsigned char keycode = at_keybuffer.dequeue();
-      at_write(keycode);      
-    }
-    interrupts();
-  //}
+  noInterrupts();
+  at_waitForCts();
+  while(!at_keybuffer.isEmpty()) {
+    unsigned char keycode = at_keybuffer.dequeue();
+    at_write(keycode);
+  }
+  interrupts();
 }
 
 void at_waitForCts() {
@@ -52,6 +61,15 @@ void at_sendBit(boolean bit) {
   delayMicroseconds(40);
 }
 
+int at_readBit() {
+  digitalWrite(at_clk, LOW);
+  delayMicroseconds(40);
+  int rbit = digitalRead(at_data) == HIGH ? 1 : 0;
+  digitalWrite(at_clk, HIGH);
+  delayMicroseconds(40);
+  return rbit;
+}
+
 unsigned char getOddParity(unsigned char p) {
   p = p ^ (p >> 4 | p << 4);
   p = p ^ (p >> 2);
@@ -59,58 +77,90 @@ unsigned char getOddParity(unsigned char p) {
   return p & 1;
 }
 
-void at_write(unsigned char value) { 
+unsigned char at_read() {
+  pinMode(at_clk, OUTPUT);
+  pinMode(at_data, INPUT);
 
-   unsigned char parity = getOddParity(value);
-   unsigned char bits[8] ;
-   byte p = 0 ; 
-   byte j = 0 ;
+  // prereq for entry: clk is low by host, data is low by host and is start bit value.
+  // so we just need to read the 8bits data, 1 parity, and 1 stop bit. 
+  // transition to data first
+  digitalWrite(at_clk, HIGH);
+  delayMicroseconds(40);
 
-   for (j=0 ; j < 8; j++) {
-     if (value & 1) bits[j] = 1 ;
-     else bits[j] = 0 ; 
-     value = value >> 1 ; 
-   }
+  unsigned char data = 0 ; 
 
-   at_waitForCts();
+  for (int i=0; i < 8; i++) {
+    data += at_readBit() << i; 
+  } 
 
-   pinMode(at_clk, OUTPUT);
-   pinMode(at_data, OUTPUT);
+  int hostParity = at_readBit();
+  if (hostParity != getOddParity(data)) {
+    // error, request resend
+  }
 
-   at_sendBit(0); // start bit.
+  at_readBit(); // stop bit.
+
+  pinMode(at_data, OUTPUT);
+  at_sendBit(0); // send the ack bit
+
+  pinMode(at_clk, INPUT);
+  pinMode(at_data, INPUT);
+  return data;
+}
+
+void at_write(unsigned char value, boolean response) { 
+
+  unsigned char parity = getOddParity(value);
+  unsigned char bits[8] ;
+  byte p = 0 ; 
+  byte j = 0 ;
+
+  for (j=0 ; j < 8; j++) {
+    if (value & 1) bits[j] = 1 ;
+    else bits[j] = 0 ; 
+    value = value >> 1 ; 
+  }
+
+
+  pinMode(at_clk, OUTPUT);
+  pinMode(at_data, OUTPUT);
+
+  at_sendBit(0); // start bit.
       
-   byte i = 0 ; 
+  byte i = 0 ; 
 
-   for (i=0; i < 8; i++) {
-      at_sendBit(bits[p]);
-      p++ ; 
-   } 
+  for (i=0; i < 8; i++) {
+    at_sendBit(bits[p]);
+    p++ ; 
+  } 
 
-   at_sendBit(parity);
+  at_sendBit(parity);
 
-   at_sendBit(1); // stop bit.
+  at_sendBit(1); // stop bit.
 
-   digitalWrite(at_clk, HIGH); 
-   digitalWrite(at_data, HIGH);  
+  digitalWrite(at_clk, HIGH); 
+  digitalWrite(at_data, HIGH);  
    
-   pinMode(at_clk, INPUT);
-   pinMode(at_data, INPUT);
+  pinMode(at_clk, INPUT);
+  pinMode(at_data, INPUT);
 }
 
-void at_break(unsigned char value) {
+void at_write(unsigned char value) {
+  at_write(value, false);
+}
+
+void at_enqueue(unsigned char* value, int sz) {
   noInterrupts();
-  at_keybuffer.enqueue(0xF0);
-  at_keybuffer.enqueue(value);
+  for(int i = 0; i < sz; i++) {
+    at_keybuffer.enqueue(value[i]);
+  }
   interrupts();
 }
 
-void at_make(unsigned char value) {
-  noInterrupts();
-  at_keybuffer.enqueue(value);
-  interrupts();
+void handleHostData() {
+  unsigned char command = at_read();
+  at_write(0xFA, true);
 }
-
-
 
 #endif
 
