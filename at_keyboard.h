@@ -22,28 +22,37 @@ void at_write(unsigned char value);
 void at_enqueue(unsigned char* value, int sz);
 void handleHostData();
 
+void opencWrite(int pin, int value) {
+  if (value == HIGH) {
+    pinMode(pin, INPUT);
+  } else {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+}
+
+int opencRead(int pin) {
+  pinMode(pin, INPUT);
+  delayMicroseconds(5);
+  return digitalRead(pin);
+}
 
 void at_setup() {
-  pinMode(at_clk, OUTPUT); 
-  pinMode(at_data, OUTPUT); 
-  digitalWrite(at_clk, HIGH); 
-  digitalWrite(at_data, LOW);
-  delayMicroseconds(50);
-  pinMode(at_clk, INPUT);
-  pinMode(at_data, INPUT); 
+  opencWrite(at_clk, HIGH); 
+  opencWrite(at_data, LOW);
 
   pinMode(ledd, OUTPUT);
   digitalWrite(ledd, LOW);
 }
 
 boolean at_isHostRTS() {
-  if (digitalRead(at_clk) == LOW) {
+  if (opencRead(at_clk) == LOW) {
     int duration = 65;
-    while(duration > 0 && digitalRead(at_clk) == LOW) {
+    while(duration > 0 && opencRead(at_clk) == LOW) {
       duration -= 5;
       delayMicroseconds(5);
     }
-    if (duration <= 0 && digitalRead(at_clk) == HIGH && digitalRead(at_data) == LOW) {
+    if (opencRead(at_clk) == HIGH && opencRead(at_data) == LOW) {
       return true;
     }
   }
@@ -65,20 +74,19 @@ void at_loop() {
 }
 
 void at_sendBit(boolean bit) {
-  digitalWrite(at_clk, HIGH);
-  digitalWrite(at_data, bit ? HIGH : LOW);
+  opencWrite(at_clk, HIGH);
+  opencWrite(at_data, bit ? HIGH : LOW);
   delayMicroseconds(40);
-  digitalWrite(at_clk, LOW);
+  opencWrite(at_clk, LOW);
   delayMicroseconds(40);
-  digitalWrite(at_clk, HIGH);
+  opencWrite(at_clk, HIGH);
 }
 
 int at_readBit() {
-  digitalWrite(at_clk, LOW);
+  opencWrite(at_clk, LOW);
   delayMicroseconds(40);
-  digitalWrite(at_clk, HIGH);
-  int rbit = digitalRead(at_data) == HIGH ? 1 : 0;
-  delayMicroseconds(40);
+  opencWrite(at_clk, HIGH);
+  int rbit = opencRead(at_data) == HIGH ? 1 : 0;
 
   return rbit;
 }
@@ -91,13 +99,6 @@ unsigned char getOddParity(unsigned char p) {
 }
 
 unsigned char at_read() {
-  pinMode(at_clk, OUTPUT);
-  pinMode(at_data, INPUT);
-
-  // prereq for entry: data is low by host and is start bit value.
-  // so we just need to read the 8bits data, 1 parity, and 1 stop bit. 
-  // transition to data first
-
   unsigned char data = 0 ; 
 
   for (int i=0; i < 8; i++) {
@@ -106,16 +107,15 @@ unsigned char at_read() {
 
   int hostParity = at_readBit();
   if (hostParity != getOddParity(data)) {
-    // error, request resend
+    digitalWrite(ledd, HIGH);
+  } else {
+    digitalWrite(ledd, LOW);
   }
 
-  at_readBit(); // stop bit.
+  at_readBit(); // read stop bit.
 
-  pinMode(at_data, OUTPUT);
   at_sendBit(0); // send the ack bit
 
-  pinMode(at_clk, INPUT);
-  pinMode(at_data, INPUT);
   delayMicroseconds(40);
   return data;
 }
@@ -133,10 +133,6 @@ void at_write(unsigned char value, boolean response) {
     value = value >> 1 ; 
   }
 
-
-  pinMode(at_clk, OUTPUT);
-  pinMode(at_data, OUTPUT);
-
   at_sendBit(0); // start bit.
       
   byte i = 0 ; 
@@ -144,17 +140,15 @@ void at_write(unsigned char value, boolean response) {
   for (i=0; i < 8; i++) {
     at_sendBit(bits[p]);
     p++ ; 
-  } 
+  }
 
   at_sendBit(parity);
 
   at_sendBit(1); // stop bit.
 
-  digitalWrite(at_clk, HIGH); 
-  digitalWrite(at_data, HIGH);  
+  opencWrite(at_clk, HIGH); 
+  opencWrite(at_data, HIGH);  
    
-  pinMode(at_clk, INPUT);
-  pinMode(at_data, INPUT);
   delayMicroseconds(40);
 }
 
@@ -172,13 +166,15 @@ void at_enqueue(unsigned char* value, int sz) {
 
 void handleHostData() {
   unsigned char command = at_read();
+  delayMicroseconds(30);
+
   if (command == 0xED) {
     at_write(0xFA);
     unsigned char indic = at_read();
     if (indic & 0x04) {
-      digitalWrite(ledd, HIGH);
+      //digitalWrite(ledd, HIGH);
     } else {
-      digitalWrite(ledd, LOW);
+      //digitalWrite(ledd, LOW);
     }
     at_write(0xFA);
   } else if (command == 0xFF) {
