@@ -13,7 +13,7 @@ boolean selftest = true;
 
 void at_setup();
 void at_loop();
-void at_waitForCts();
+boolean at_isHostRTS();
 void at_sendBit(boolean bit);
 int at_readBit();
 unsigned char getOddParity(unsigned char p);
@@ -36,37 +36,51 @@ void at_setup() {
   digitalWrite(ledd, LOW);
 }
 
+boolean at_isHostRTS() {
+  if (digitalRead(at_clk) == LOW) {
+    int duration = 65;
+    while(duration > 0 && digitalRead(at_clk) == LOW) {
+      duration -= 5;
+      delayMicroseconds(5);
+    }
+    if (duration <= 0 && digitalRead(at_clk) == LOW && digitalRead(at_data) == LOW) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void at_loop() {
   noInterrupts();
-  at_waitForCts();
-  while(!at_keybuffer.isEmpty()) {
-    unsigned char keycode = at_keybuffer.dequeue();
-    at_write(keycode);
+  boolean rts = at_isHostRTS();
+  if (rts) {
+    digitalWrite(ledd, HIGH);
+  } else {
+    digitalWrite(ledd, LOW);
+    while(!at_keybuffer.isEmpty()) {
+      unsigned char keycode = at_keybuffer.dequeue();
+      at_write(keycode);
+    }
   }
   interrupts();
 }
 
-void at_waitForCts() {
-  while (digitalRead(at_clk) == LOW || digitalRead(at_data) == LOW) {
-    delayMicroseconds(15);
-  }
-  delayMicroseconds(50);
-}
-
 void at_sendBit(boolean bit) {
-  digitalWrite(at_data, bit ? HIGH : LOW);
   digitalWrite(at_clk, HIGH);
+  digitalWrite(at_data, bit ? HIGH : LOW);
   delayMicroseconds(40);
   digitalWrite(at_clk, LOW);
   delayMicroseconds(40);
+  digitalWrite(at_clk, HIGH);
 }
 
 int at_readBit() {
   digitalWrite(at_clk, LOW);
   delayMicroseconds(40);
-  int rbit = digitalRead(at_data) == HIGH ? 1 : 0;
   digitalWrite(at_clk, HIGH);
   delayMicroseconds(40);
+  int rbit = digitalRead(at_data) == HIGH ? 1 : 0;
+
   return rbit;
 }
 
@@ -157,9 +171,11 @@ void at_enqueue(unsigned char* value, int sz) {
   interrupts();
 }
 
+int toggleLed = 0;
+
 void handleHostData() {
-  unsigned char command = at_read();
-  at_write(0xFA, true);
+  toggleLed = (toggleLed + 1) & 0x01;
+  digitalWrite(ledd, toggleLed);
 }
 
 #endif
