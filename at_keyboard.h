@@ -43,7 +43,7 @@ boolean at_isHostRTS() {
       duration -= 5;
       delayMicroseconds(5);
     }
-    if (duration <= 0 && digitalRead(at_clk) == LOW && digitalRead(at_data) == LOW) {
+    if (duration <= 0 && digitalRead(at_clk) == HIGH && digitalRead(at_data) == LOW) {
       return true;
     }
   }
@@ -54,9 +54,8 @@ void at_loop() {
   noInterrupts();
   boolean rts = at_isHostRTS();
   if (rts) {
-    digitalWrite(ledd, HIGH);
+    handleHostData();
   } else {
-    digitalWrite(ledd, LOW);
     while(!at_keybuffer.isEmpty()) {
       unsigned char keycode = at_keybuffer.dequeue();
       at_write(keycode);
@@ -78,8 +77,8 @@ int at_readBit() {
   digitalWrite(at_clk, LOW);
   delayMicroseconds(40);
   digitalWrite(at_clk, HIGH);
-  delayMicroseconds(40);
   int rbit = digitalRead(at_data) == HIGH ? 1 : 0;
+  delayMicroseconds(40);
 
   return rbit;
 }
@@ -95,16 +94,14 @@ unsigned char at_read() {
   pinMode(at_clk, OUTPUT);
   pinMode(at_data, INPUT);
 
-  // prereq for entry: clk is low by host, data is low by host and is start bit value.
+  // prereq for entry: data is low by host and is start bit value.
   // so we just need to read the 8bits data, 1 parity, and 1 stop bit. 
   // transition to data first
-  digitalWrite(at_clk, HIGH);
-  delayMicroseconds(40);
 
   unsigned char data = 0 ; 
 
   for (int i=0; i < 8; i++) {
-    data += at_readBit() << i; 
+    data += at_readBit() << i;
   } 
 
   int hostParity = at_readBit();
@@ -119,6 +116,7 @@ unsigned char at_read() {
 
   pinMode(at_clk, INPUT);
   pinMode(at_data, INPUT);
+  delayMicroseconds(40);
   return data;
 }
 
@@ -157,6 +155,7 @@ void at_write(unsigned char value, boolean response) {
    
   pinMode(at_clk, INPUT);
   pinMode(at_data, INPUT);
+  delayMicroseconds(40);
 }
 
 void at_write(unsigned char value) {
@@ -171,11 +170,23 @@ void at_enqueue(unsigned char* value, int sz) {
   interrupts();
 }
 
-int toggleLed = 0;
-
 void handleHostData() {
-  toggleLed = (toggleLed + 1) & 0x01;
-  digitalWrite(ledd, toggleLed);
+  unsigned char command = at_read();
+  if (command == 0xED) {
+    at_write(0xFA);
+    unsigned char indic = at_read();
+    if (indic & 0x04) {
+      digitalWrite(ledd, HIGH);
+    } else {
+      digitalWrite(ledd, LOW);
+    }
+    at_write(0xFA);
+  } else if (command == 0xFF) {
+    // supposed to flash my LEDs too - LOL, but this keyboard doesn't have LEDS
+    at_write(0xAA);
+  } else {
+    at_write(0xFA);
+  }
 }
 
 #endif
