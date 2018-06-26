@@ -83,10 +83,12 @@ void at_sendBit(boolean bit) {
 }
 
 int at_readBit() {
+  opencWrite(at_clk, HIGH);
+  delayMicroseconds(40);
   opencWrite(at_clk, LOW);
+  int rbit = opencRead(at_data) == HIGH ? 1 : 0;
   delayMicroseconds(40);
   opencWrite(at_clk, HIGH);
-  int rbit = opencRead(at_data) == HIGH ? 1 : 0;
 
   return rbit;
 }
@@ -99,7 +101,9 @@ unsigned char getOddParity(unsigned char p) {
 }
 
 unsigned char at_read() {
-  unsigned char data = 0 ; 
+  unsigned char data = 0;
+
+  at_readBit(); // clock out the start bit.
 
   for (int i=0; i < 8; i++) {
     data += at_readBit() << i;
