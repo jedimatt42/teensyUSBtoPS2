@@ -16,6 +16,8 @@
 #define CAPSLOCK_STARTUP false
 #define SCROLLLOCK_STARTUP false
 
+void updateIndicators(boolean numlock, boolean capslock, boolean scrolllock);
+
 #include "UsbKbdRptParser.h"
 #include "at_keyboard.h"
 
@@ -28,6 +30,9 @@ UsbKbdRptParser Prs;
 long lastGoodState;
 long firstBoot;
 
+void updateIndicators(boolean numlock, boolean capslock, boolean scrolllock) {
+  Prs.setKeyLocks(&HidKeyboard, numlock, capslock, scrolllock);
+}
 
 void setup()
 {
