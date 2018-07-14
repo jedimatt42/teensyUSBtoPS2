@@ -19,6 +19,8 @@ class UsbKbdRptParser : public KeyboardReportParser
     virtual void OnKeyUp	(uint8_t mod, uint8_t key);
 
   private:
+    boolean ctrl;
+    boolean alt;
     void updateModifier(uint8_t mask, uint8_t before, uint8_t after, unsigned char* scancode, int sz);
     void setKeyState(unsigned char* scancode, int sz, boolean state);
     void handleKey(uint8_t usbkey, boolean state);
@@ -29,6 +31,8 @@ class UsbKbdRptParser : public KeyboardReportParser
 };
 
 UsbKbdRptParser::UsbKbdRptParser() {
+  ctrl = false;
+  alt = false;
 }
 
 void UsbKbdRptParser::setKeyLocks(USBHID* hid, boolean numLock, boolean capsLock, boolean scrollLock) { 
@@ -50,9 +54,21 @@ void UsbKbdRptParser::updateModifier(uint8_t mask, uint8_t before, uint8_t after
   if (wasMod && (!isMod)) {
     // RELEASE MODIFIER
     setKeyState(scancode, sz, false);
+    if (mask == U_LEFTCTRL || mask == U_RIGHTCTRL) {
+      ctrl = false;
+    }
+    if (mask == U_LEFTALT || mask == U_RIGHTALT) {
+      alt = false;
+    }
   } else if (isMod && (!wasMod)) {
     // PRESS MODIFIER
     setKeyState(scancode, sz, true);
+    if (mask == U_LEFTCTRL || mask == U_RIGHTCTRL) {
+      ctrl = true;
+    }
+    if (mask == U_LEFTALT || mask == U_RIGHTALT) {
+      alt = true;
+    }
   }
 }
 
@@ -152,7 +168,17 @@ void UsbKbdRptParser::handleKey(uint8_t usbkey, boolean state) {
     case U_F9:
       setKeyState(AT_F9, sizeof(AT_F9), state); break;
     case U_F10:
-      setKeyState(AT_F10, sizeof(AT_F10), state); break;
+      //setKeyState(AT_F10, sizeof(AT_F10), state);
+      if (ctrl && alt && state) {
+        pinMode(g1Pin, OUTPUT_OPENDRAIN);
+        digitalWrite(g1Pin, LOW);
+        delayMicroseconds(200);
+        digitalWrite(g1Pin, HIGH);
+        pinMode(g1Pin, INPUT);
+      } else {
+        setKeyState(AT_F10, sizeof(AT_F10), state);
+      }
+      break;
     case U_F11:
       setKeyState(AT_F11, sizeof(AT_F11), state); break;
     case U_F12:

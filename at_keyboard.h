@@ -164,14 +164,18 @@ void at_enqueue(unsigned char* value, int sz) {
   interrupts();
 }
 
+#define ATH_LOCKS 0xED
+#define ATH_ACCEPT 0xFA
+#define ATH_RESEND 0xFE
+
 void handleHostData() {
   unsigned char command = at_read();
 
   if (command == 0xED) {
     at_write(0xFA); // ack command
-    command = at_read(); // process parameter
+    /* command = at_read(); // process parameter
     setKeyboardLocks(command & 0x40, command & 0x20, command & 0x80);
-    at_write(0xFA);
+    at_write(0xFA); */
   } else if (command == 0xFF) {
     at_write(0xAA);
   } else {

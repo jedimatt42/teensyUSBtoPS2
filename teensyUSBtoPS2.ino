@@ -8,6 +8,7 @@
 #include <SPI.h>
 
 const int ledPin = 13;
+const int g1Pin = 23;
 
 // Reboot support
 #define CPU_RESTART_ADDR (uint32_t *)0xE000ED0C
@@ -34,6 +35,8 @@ long firstBoot;
 
 void setup()
 {
+  pinMode(g1Pin, INPUT);
+  
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   firstBoot = lastGoodState = millis();
