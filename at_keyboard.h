@@ -9,7 +9,6 @@ boolean selftest = true;
 #define at_clk 0
 #define at_data 1
 
-#define ledd 16
 
 void at_setup();
 void at_loop();
@@ -21,6 +20,15 @@ unsigned char at_read();
 void at_write(unsigned char value);
 void at_enqueue(unsigned char* value, int sz);
 void handleHostData();
+
+void debugLed(int count) {
+  for(int i = 0; i < count; i++) {
+    digitalWrite(ledPin, HIGH);
+    delay(10);
+    digitalWrite(ledPin, LOW);
+    delay(10);
+  }
+}
 
 void opencWrite(int pin, int value) {
   if (value == HIGH) {
@@ -40,9 +48,6 @@ int opencRead(int pin) {
 void at_setup() {
   opencWrite(at_clk, HIGH); 
   opencWrite(at_data, LOW);
-
-  pinMode(ledd, OUTPUT);
-  digitalWrite(ledd, LOW);
 }
 
 boolean at_isHostRTS() {
@@ -106,11 +111,6 @@ unsigned char at_read() {
   } 
 
   int hostParity = at_readBit();
-  if (hostParity != getOddParity(data)) {
-    digitalWrite(ledd, HIGH);
-  } else {
-    digitalWrite(ledd, LOW);
-  }
 
   at_readBit(); // read stop bit.
 
@@ -139,7 +139,7 @@ void at_write(unsigned char value, boolean response) {
 
   for (i=0; i < 8; i++) {
     at_sendBit(bits[p]);
-    p++ ; 
+    p++; 
   }
 
   at_sendBit(parity);
@@ -166,19 +166,13 @@ void at_enqueue(unsigned char* value, int sz) {
 
 void handleHostData() {
   unsigned char command = at_read();
-  delayMicroseconds(30);
 
   if (command == 0xED) {
-    at_write(0xFA);
-    unsigned char indic = at_read();
-    if (indic & 0x04) {
-      //digitalWrite(ledd, HIGH);
-    } else {
-      //digitalWrite(ledd, LOW);
-    }
+    at_write(0xFA); // ack command
+    command = at_read(); // process parameter
+    setKeyboardLocks(command & 0x40, command & 0x20, command & 0x80);
     at_write(0xFA);
   } else if (command == 0xFF) {
-    // supposed to flash my LEDs too - LOL, but this keyboard doesn't have LEDS
     at_write(0xAA);
   } else {
     at_write(0xFA);
